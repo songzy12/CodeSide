@@ -1,4 +1,5 @@
 import model
+import math
 
 DELTA_X = 10
 
@@ -32,9 +33,9 @@ class MyStrategy:
                 default=None)
 
             debug.draw(model.CustomData.Log(
-                "Health pack: {}".format(self.nearest_health_pack)))
+                "nearest_health_pack: {}".format(self.nearest_health_pack)))
             if self.nearest_health_pack is not None:
-                self.target_pos = self.nearest_weapon.position
+                self.target_pos = self.nearest_health_pack.position
                 return
 
         self.nearest_enemy = min(
@@ -44,12 +45,13 @@ class MyStrategy:
         if self.nearest_enemy is not None:
             # TODO: keep some distance
             self.target_pos = self.nearest_enemy.position
-            self.target_pos.x += DELTA_X
             return
 
-    def get_velocity(self, unit, game):
+    def get_velocity(self, unit, game, debug):
         # TODO: this may cause stuck
         self.velocity = self.target_pos.x - unit.position.x
+        debug.draw(model.CustomData.Log(
+            "Velocity: {}, target.x: {}, unit.x: {}".format(self.velocity, self.target_pos.x, unit.position.x)))
 
         self.jump = self.target_pos.y > unit.position.y
         if self.target_pos.x > unit.position.x and \
@@ -65,6 +67,9 @@ class MyStrategy:
             self.aim = model.Vec2Double(
                 self.nearest_enemy.position.x - unit.position.x,
                 self.nearest_enemy.position.y - unit.position.y)
+            aim_length = math.sqrt(self.aim.x ** 2 + self.aim.y ** 2)
+            self.aim.x = 1 / aim_length * self.aim.x
+            self.aim.y = 1 / aim_length * self.aim.y
 
     def get_swap_weapon(self):
         # TODO: implement this
@@ -82,11 +87,9 @@ class MyStrategy:
         # Replace this code with your own
 
         self.get_target_pos(unit, game, debug)
-        self.get_velocity(unit, game)
+        self.get_velocity(unit, game, debug)
         debug.draw(model.CustomData.Log(
             "Target pos: {}".format(self.target_pos)))
-        debug.draw(model.CustomData.Log(
-            "Loot boxes: {}".format(" ".join(map(lambda x: repr(x.item), game.loot_boxes)))))
 
         self.get_aim(unit)
         self.get_swap_weapon()
