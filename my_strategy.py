@@ -13,6 +13,12 @@ class MyStrategy:
         pass
 
     def get_target_pos(self, unit, game, debug):
+        def get_enermy_position(unit, game, debug):
+            for u in game.units:
+                if u.player_id != unit.player_id:
+                    return u.position
+        enermy_position = get_enermy_position(unit, game, debug)
+
         self.target_pos = unit.position
 
         if unit.weapon is None:
@@ -26,12 +32,21 @@ class MyStrategy:
                 return
 
         if unit.health < game.properties.unit_max_health:
-            self.nearest_health_pack = min(
-                filter(lambda box: isinstance(
-                    box.item, model.Item.HealthPack), game.loot_boxes),
-                key=lambda box: distance_sqr(box.position, unit.position),
-                default=None)
+            health_pack_positions = []
+            for box in game.loot_boxes:
+                if isinstance(box.item, model.Item.HealthPack):
+                    health_pack_positions.append([distance_sqr(
+                        box.position, unit.position), distance_sqr(box.position, enermy_position), box])
+            health_pack_positions.sort()
 
+            self.nearest_health_pack = None
+            for unit_distance, enermy_distance, box in health_pack_positions:
+                if unit_distance < enermy_distance:
+                    self.nearest_health_pack = box
+                    break
+            if self.nearest_health_pack is None and health_pack_positions:
+                self.nearest_health_pack = health_pack_positions[0][-1]
+            
             debug.draw(model.CustomData.Log(
                 "nearest_health_pack: {}".format(self.nearest_health_pack)))
             if self.nearest_health_pack is not None:
@@ -77,7 +92,7 @@ class MyStrategy:
 
     def get_shoot(self):
         # TODO: if explosion will hurt ourselves, then no shoot
-        self.shoot = False
+        self.shoot = True
         self.reload = False
 
     def get_plant_mine(self):
