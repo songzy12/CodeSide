@@ -1,7 +1,7 @@
 import model
 import math
 
-DELTA_X = 10
+LOCAL = True
 
 
 def distance_sqr(a, b):
@@ -13,13 +13,12 @@ class MyStrategy:
         pass
 
     def get_target_pos(self, unit, game, debug):
-        def get_enermy_position(unit, game, debug):
-            for u in game.units:
-                if u.player_id != unit.player_id:
-                    return u.position
-        enermy_position = get_enermy_position(unit, game, debug)
-
         self.target_pos = unit.position
+
+        self.nearest_enemy = min(
+            filter(lambda u: u.player_id != unit.player_id, game.units),
+            key=lambda u: distance_sqr(u.position, unit.position),
+            default=None)
 
         if unit.weapon is None:
             self.nearest_weapon = min(
@@ -36,7 +35,7 @@ class MyStrategy:
             for box in game.loot_boxes:
                 if isinstance(box.item, model.Item.HealthPack):
                     health_pack_positions.append([distance_sqr(
-                        box.position, unit.position), distance_sqr(box.position, enermy_position), box])
+                        box.position, unit.position), distance_sqr(box.position, self.nearest_enemy.position), box])
             health_pack_positions.sort()
 
             self.nearest_health_pack = None
@@ -46,17 +45,13 @@ class MyStrategy:
                     break
             if self.nearest_health_pack is None and health_pack_positions:
                 self.nearest_health_pack = health_pack_positions[0][-1]
-            
+
             debug.draw(model.CustomData.Log(
                 "nearest_health_pack: {}".format(self.nearest_health_pack)))
             if self.nearest_health_pack is not None:
                 self.target_pos = self.nearest_health_pack.position
                 return
 
-        self.nearest_enemy = min(
-            filter(lambda u: u.player_id != unit.player_id, game.units),
-            key=lambda u: distance_sqr(u.position, unit.position),
-            default=None)
         if self.nearest_enemy is not None:
             # TODO: keep some distance
             self.target_pos = self.nearest_enemy.position
@@ -66,7 +61,7 @@ class MyStrategy:
         # TODO: this may cause stuck
         self.velocity = self.target_pos.x - unit.position.x
         debug.draw(model.CustomData.Log(
-            "Velocity: {}, target.x: {}, unit.x: {}".format(self.velocity, self.target_pos.x, unit.position.x)))
+            "velocity: {}\ttarget.x: {}\tunit.x: {}".format(self.velocity, self.target_pos.x, unit.position.x)))
 
         self.jump = self.target_pos.y > unit.position.y
         if self.target_pos.x > unit.position.x and \
@@ -75,6 +70,7 @@ class MyStrategy:
         if self.target_pos.x < unit.position.x and \
                 game.level.tiles[int(unit.position.x - 1)][int(unit.position.y)] == model.Tile.WALL:
             self.jump = True
+        self.jump_down = not self.jump
 
     def get_aim(self, unit):
         self.aim = model.Vec2Double(0, 0)
@@ -90,10 +86,30 @@ class MyStrategy:
         # TODO: implement this
         self.swap_weapon = False
 
-    def get_shoot(self):
-        # TODO: if explosion will hurt ourselves, then no shoot
-        self.shoot = True
+    def get_shoot(self, unit, game, debug):
         self.reload = False
+
+        # if there is a wall on the path from unit.position to enermy.position
+        # then we will not let the unit shoot
+        self.shoot = True
+        x1, y1 = int(unit.position.x), int(unit.position.y)
+        x2, y2 = int(self.nearest_enemy.position.x), int(
+            self.nearest_enemy.position.y)
+        if x2 < x1:
+            x1, x2 = x2, x1
+            y1, y2 = y2, y1
+
+        if x1 == x2:
+            return
+
+        delta_y = (y2 - y1) // (x2 - x1)
+
+        for t in range(x2 - x1):
+            x = x1 + t
+            y = y1 + delta_y * t
+            if game.level.tiles[x][y] == model.Tile.WALL:
+                self.shoot = False
+                break
 
     def get_plant_mine(self):
         self.plant_mine = False
@@ -103,18 +119,16 @@ class MyStrategy:
 
         self.get_target_pos(unit, game, debug)
         self.get_velocity(unit, game, debug)
-        debug.draw(model.CustomData.Log(
-            "Target pos: {}".format(self.target_pos)))
 
         self.get_aim(unit)
         self.get_swap_weapon()
-        self.get_shoot()
+        self.get_shoot(unit, game, debug)
         self.get_plant_mine()
 
         return model.UnitAction(
             velocity=self.velocity,
             jump=self.jump,
-            jump_down=not self.jump,
+            jump_down=self.jump_down,
             aim=self.aim,
             shoot=self.shoot,
             reload=self.reload,
